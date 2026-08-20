@@ -17,6 +17,8 @@ All plugins share the NX look: deep-space dark, `#7700FF` violet accents, glassy
 | **VCRhythm** | Passively logs who's in voice and when (stored locally in IndexedDB) and renders per-user weekly activity heatmaps. |
 | **VoiceMastering** | A mixing desk for voice chat: auto-normalizes everyone to the same loudness (boost the quiet, tame the loud) and sets per-user gain well past Discord's 200% cap. |
 | **PresenceRadar** | Live top-down map of every voice channel in the server — who's where, muted/streaming icons, a green pulse ring on whoever's talking. Click a channel to hop in. |
+| **BitrateAutopilot** | Adaptively tunes your outgoing voice bitrate from live packet-loss and ping — backs off on a bad line, ramps back up when it clears. Pairs with VoiceNetworkHUD. |
+| **FriendRadar** | Desktop ping the instant a chosen friend joins any voice channel, with an optional clingy mode that follows them in. Right-click a user → *Track in Friend Radar*. |
 
 Each plugin exposes its controls through the **Vencord toolbox** (the icon in the top-right of the app) and/or a right-click context menu, plus settings in **Vencord → Plugins**.
 
