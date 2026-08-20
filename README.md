@@ -42,6 +42,10 @@ cd vencord-nx-plugins
 ```
 That clones Vencord at a pinned version, drops the plugins in, builds, and deploys to `~/.config/Vencord/dist` (your old dist gets backed up to `dist.bak` first). Ctrl+R Discord when it's done.
 
+## theme
+
+There's a matching Vencord theme in [`themes/nx.theme.css`](themes/nx.theme.css) — the NX look (deep space, violet, glassy chrome, faint starfield) applied to Discord itself so the whole client matches the plugin overlays. `install.sh` drops it into your Vencord themes folder; enable it under Vencord → Themes → NX. It recolors through Discord's design tokens rather than chasing hashed class names, so it holds up across updates.
+
 ## about bans
 
 Discord doesn't scan your client, so none of this is "detectable" the way people assume — it only sees traffic. Almost everything here is local reads it can't see at all. The one exception is `SoundboardSpam`, which fires real API calls in a loop; the risk there isn't detection, it's someone reporting you for blasting them. So keep that one among friends. Nobody gets banned just for running Vencord.

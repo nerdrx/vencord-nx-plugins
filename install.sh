@@ -23,5 +23,12 @@ cp -r "$DEST" "$DEST.bak"
 echo "==> Deploying into $DEST"
 tar -xzf "$TARBALL" -C "$(dirname "$DEST")"
 
+# NX theme → Vencord themes dir (enable it under Vencord → Themes)
+THEMES="$(dirname "$DEST")/themes"
+mkdir -p "$THEMES"
+cp "$ROOT/themes/nx.theme.css" "$THEMES/nx.theme.css"
+echo "==> Installed NX theme → $THEMES/nx.theme.css"
+
 echo "==> Done. Fully restart Discord (or Ctrl+R) to load the plugins."
+echo "    Enable the look under Vencord → Themes → NX."
 echo "    Tip: turn OFF Vencord auto-update so it doesn't overwrite this build."

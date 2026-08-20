@@ -1,0 +1,317 @@
+/**
+ * @name NX
+ * @author nerdrx
+ * @description Liquid glass on deep space — the NX design language for Discord. Violet #7700FF, cyan light, angular glass, a faint starfield.
+ * @version 1.0.0
+ */
+
+/* ============================================================
+   NX tokens (frozen — mirrors nx-hub docs/DESIGN.md)
+   ============================================================ */
+:root {
+    --nx-bg-top: #0a0714;
+    --nx-bg-bottom: #12091f;
+    --nx-panel: #171028;
+    --nx-panel-2: #1d1433;
+    --nx-violet: #7700ff;
+    --nx-violet-soft: #9a3cff;
+    --nx-cyan: #00e5ff;
+    --nx-amber: #ffb300;
+    --nx-text: #efeaff;
+    --nx-muted: #9a8fc0;
+    --nx-line: #2a1f45;
+    --nx-danger: #ff5470;
+
+    --nx-radius: 6px;
+    --nx-radius-sm: 4px;
+    --nx-radius-xs: 3px;
+
+    --nx-glass-bar: linear-gradient(180deg, rgba(46, 30, 78, 0.55) 0%, rgba(18, 11, 34, 0.66) 100%);
+    --nx-glass-sheet: linear-gradient(158deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.025) 30%, rgba(19, 12, 34, 0.72) 100%);
+    --nx-well: linear-gradient(180deg, rgba(7, 4, 16, 0.5) 0%, rgba(7, 4, 16, 0.32) 100%);
+    --nx-blur-bar: blur(22px) saturate(170%);
+    --nx-blur-sheet: blur(34px) saturate(185%);
+    --nx-hairline: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(154,60,255,0.18) 18%, rgba(0,229,255,0.22) 50%, rgba(154,60,255,0.18) 82%, rgba(255,255,255,0) 100%);
+    --nx-edge: 1px solid rgba(154, 60, 255, 0.22);
+}
+
+/* ============================================================
+   Remap Discord's own design tokens → NX palette.
+   Doing it at the variable level recolors the whole client
+   regardless of hashed class names, and survives updates.
+   ============================================================ */
+.theme-dark,
+.theme-light,
+:root {
+    /* base surfaces — kept translucent so the space field shows through */
+    --background-primary: rgba(16, 10, 30, 0.62);
+    --background-secondary: rgba(20, 13, 38, 0.52);
+    --background-secondary-alt: rgba(24, 16, 44, 0.58);
+    --background-tertiary: rgba(9, 5, 20, 0.55);
+    --background-accent: var(--nx-violet);
+    --background-floating: rgba(18, 11, 34, 0.72);
+    --background-nested-floating: rgba(24, 16, 44, 0.7);
+    --background-mobile-primary: rgba(16, 10, 30, 0.62);
+    --background-mobile-secondary: rgba(20, 13, 38, 0.52);
+    --channeltextarea-background: rgba(7, 4, 16, 0.5);
+    --deprecated-card-bg: rgba(20, 13, 38, 0.5);
+    --deprecated-card-editable-bg: rgba(7, 4, 16, 0.4);
+    --deprecated-quickswitcher-input-background: rgba(7, 4, 16, 0.5);
+
+    /* newer (2024+) semantic background tokens */
+    --bg-base-primary: rgba(16, 10, 30, 0.62);
+    --bg-base-secondary: rgba(20, 13, 38, 0.52);
+    --bg-base-tertiary: rgba(9, 5, 20, 0.55);
+    --bg-base-lower: rgba(9, 5, 20, 0.55);
+    --bg-base-lowest: rgba(7, 4, 16, 0.6);
+    --bg-surface-overlay: rgba(18, 11, 34, 0.72);
+    --bg-surface-overlay-tmp: rgba(18, 11, 34, 0.72);
+    --bg-surface-raised: rgba(24, 16, 44, 0.58);
+    --background-base-low: rgba(20, 13, 38, 0.52);
+    --background-base-lower: rgba(12, 7, 24, 0.55);
+    --background-base-lowest: rgba(7, 4, 16, 0.6);
+
+    /* brand ramp → NX violet */
+    --brand-260: #5a00c8;
+    --brand-360: #6a00e0;
+    --brand-500: var(--nx-violet);
+    --brand-560: var(--nx-violet);
+    --brand-600: #6600da;
+    --brand-experiment: var(--nx-violet);
+    --brand-experiment-500: var(--nx-violet);
+    --brand-experiment-560: #6a00e0;
+    --brand-experiment-600: #6600da;
+    --brand-experiment-360: #6a00e0;
+    --brand-experiment-260: #5a00c8;
+    --button-filled-brand-background: linear-gradient(157deg, var(--nx-violet-soft) 0%, var(--nx-violet) 60%);
+    --mention-foreground: #ffffff;
+    --mention-background: rgba(119, 0, 255, 0.28);
+
+    /* text */
+    --text-normal: var(--nx-text);
+    --text-default: var(--nx-text);
+    --text-muted: var(--nx-muted);
+    --text-secondary: #b6a9dd;
+    --header-primary: #ffffff;
+    --header-secondary: var(--nx-muted);
+    --text-link: var(--nx-cyan);
+    --text-brand: var(--nx-violet-soft);
+    --interactive-normal: #c6bbe6;
+    --interactive-hover: var(--nx-text);
+    --interactive-active: #ffffff;
+    --interactive-muted: #5b4d7e;
+    --channels-default: var(--nx-muted);
+    --channel-icon: #7a6ca3;
+
+    /* selected / hover states */
+    --background-modifier-hover: rgba(154, 60, 255, 0.10);
+    --background-modifier-selected: rgba(119, 0, 255, 0.22);
+    --background-modifier-active: rgba(119, 0, 255, 0.28);
+    --background-modifier-accent: rgba(154, 60, 255, 0.14);
+
+    /* status + signal */
+    --status-online: #2ecc71;
+    --info-warning-foreground: var(--nx-amber);
+    --text-warning: var(--nx-amber);
+    --status-danger: var(--nx-danger);
+    --text-danger: var(--nx-danger);
+
+    /* scrollbars */
+    --scrollbar-thin-thumb: rgba(154, 60, 255, 0.35);
+    --scrollbar-auto-thumb: rgba(154, 60, 255, 0.35);
+    --scrollbar-auto-track: transparent;
+    --scrollbar-thin-track: transparent;
+
+    /* focus ring */
+    --focus-primary: var(--nx-violet);
+}
+
+/* ============================================================
+   The field — deep space gradient + a faint starfield,
+   painted behind the whole app.
+   ============================================================ */
+#app-mount {
+    position: relative;
+    background: linear-gradient(180deg, var(--nx-bg-top) 0%, var(--nx-bg-bottom) 100%) fixed;
+}
+
+#app-mount::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+        radial-gradient(1px 1px at 12% 22%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(1px 1px at 47% 68%, rgba(210, 190, 255, 0.45), transparent),
+        radial-gradient(1px 1px at 78% 34%, rgba(255, 255, 255, 0.4), transparent),
+        radial-gradient(1px 1px at 63% 84%, rgba(0, 229, 255, 0.35), transparent),
+        radial-gradient(1.5px 1.5px at 88% 74%, rgba(255, 255, 255, 0.35), transparent),
+        radial-gradient(1px 1px at 30% 52%, rgba(255, 255, 255, 0.3), transparent);
+    background-repeat: repeat;
+    background-size: 320px 320px, 420px 420px, 260px 260px, 500px 500px, 380px 380px, 300px 300px;
+    /* a soft violet nebula bloom in the upper-left (the NX light source) */
+    box-shadow: none;
+}
+
+#app-mount::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(60% 50% at 12% 8%, rgba(119, 0, 255, 0.16) 0%, transparent 70%),
+        radial-gradient(50% 45% at 92% 100%, rgba(0, 229, 255, 0.06) 0%, transparent 70%);
+}
+
+/* keep real content above the field */
+#app-mount > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* ============================================================
+   Glass on the chrome — bars, sidebars, members, sheets.
+   Blur only where DESIGN.md allows: chrome, not the message list.
+   ============================================================ */
+
+/* top bar / channel header */
+[class*="title_"][class*="container_"],
+section[class*="title_"],
+[class*="chat_"] [class*="header_"] {
+    background: var(--nx-glass-bar);
+    backdrop-filter: var(--nx-blur-bar);
+    -webkit-backdrop-filter: var(--nx-blur-bar);
+    border-bottom: var(--nx-edge);
+}
+
+/* channel sidebar + guild list + members list = frosted glass */
+[class*="sidebar_"],
+[class*="guilds_"],
+nav[class*="guilds"],
+[class*="membersWrap_"],
+[class*="members_"] {
+    background: var(--nx-glass-bar) !important;
+    backdrop-filter: var(--nx-blur-bar);
+    -webkit-backdrop-filter: var(--nx-blur-bar);
+}
+
+/* floating layers: menus, modals, popouts, tooltips, autocomplete */
+[class*="menu_"][role="menu"],
+[role="dialog"] [class*="root_"],
+[class*="layer_"] [class*="root_"],
+[class*="popout_"],
+[class*="autocomplete_"],
+[class*="tooltip_"] [class*="tooltipContent"] {
+    background: var(--nx-glass-sheet) !important;
+    backdrop-filter: var(--nx-blur-sheet);
+    -webkit-backdrop-filter: var(--nx-blur-sheet);
+    border: var(--nx-edge);
+    border-radius: var(--nx-radius) !important;
+    box-shadow: 0 26px 54px -16px rgba(0, 0, 0, 0.8), 0 0 40px -8px rgba(119, 0, 255, 0.28);
+}
+
+/* message input well */
+[class*="channelTextArea_"] [class*="scrollableContainer"],
+[class*="channelTextArea_"] form {
+    background: var(--nx-well);
+    border: var(--nx-edge);
+    border-radius: var(--nx-radius) !important;
+    backdrop-filter: var(--nx-blur-bar);
+    -webkit-backdrop-filter: var(--nx-blur-bar);
+}
+
+/* ============================================================
+   Accents, edges, geometry
+   ============================================================ */
+
+/* angular everything — kill Discord's big radii and pills */
+[class*="button_"],
+button[class*="lookFilled"],
+[class*="card_"],
+[class*="codeBlock_"],
+[class*="embedWrapper_"],
+[class*="attachment_"],
+img[class*="avatar"],
+[class*="wrapper_"] > svg[class*="mask"] {
+    border-radius: var(--nx-radius-sm) !important;
+}
+[class*="pill_"],
+[class*="badge_"],
+[class*="pillWrapper_"] {
+    border-radius: var(--nx-radius-xs) !important;
+}
+
+/* selected channel gets a violet lit edge instead of a flat block */
+[class*="modeSelected_"] [class*="link_"],
+[class*="modeSelected_"] [class*="content_"] {
+    background: linear-gradient(90deg, rgba(119, 0, 255, 0.24) 0%, rgba(119, 0, 255, 0.08) 100%) !important;
+    box-shadow: inset 2px 0 0 var(--nx-violet), inset 0 0 22px -8px rgba(0, 229, 255, 0.35);
+}
+
+/* dividers → gradient hairlines that fade at both ends (no solid gray lines) */
+[class*="divider_"],
+[class*="scroller_"] [class*="divider"] {
+    border: none !important;
+    height: 1px;
+    background: var(--nx-hairline) !important;
+}
+
+/* your own messages / mentions of you: violet wash + cyan spine */
+[class*="mentioned_"] {
+    background: linear-gradient(90deg, rgba(119, 0, 255, 0.12) 0%, transparent 60%) !important;
+    box-shadow: inset 2px 0 0 var(--nx-cyan);
+}
+
+/* links + role-colored bits lean cyan-as-light */
+a[class*="anchor"] {
+    color: var(--nx-cyan);
+    text-decoration-color: rgba(0, 229, 255, 0.4);
+}
+
+/* filled brand buttons → lit violet with an upper-left highlight */
+button[class*="lookFilled"][class*="colorBrand"],
+[class*="colorBrand_"][class*="lookFilled"] {
+    background: linear-gradient(157deg, var(--nx-violet-soft) 0%, var(--nx-violet) 62%) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 18px -8px rgba(119, 0, 255, 0.6);
+}
+button[class*="lookFilled"][class*="colorBrand"]:hover {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 26px -6px rgba(0, 229, 255, 0.5);
+}
+
+/* focus rings in NX violet */
+:focus-visible {
+    box-shadow: 0 0 0 2px rgba(119, 0, 255, 0.6), 0 0 0 5px rgba(119, 0, 255, 0.2) !important;
+    outline: none !important;
+}
+
+/* thin violet scrollbars */
+::-webkit-scrollbar-thumb {
+    background: rgba(154, 60, 255, 0.35) !important;
+    border-radius: 3px !important;
+    border: none !important;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(154, 60, 255, 0.55) !important;
+}
+
+/* green/idle/dnd status dots stay circular (DESIGN.md: circles only for status) */
+[class*="avatar"] rect[mask] {
+    /* leave Discord's status masks intact */
+}
+
+/* settings sheets + user popout = sheet glass */
+[class*="userPopout"],
+[class*="userProfileOuter"],
+[class*="theme-dark"] [class*="standardSidebarView_"] {
+    background: var(--nx-glass-sheet) !important;
+    backdrop-filter: var(--nx-blur-sheet);
+    -webkit-backdrop-filter: var(--nx-blur-sheet);
+}
+
+/* respect reduced motion — nothing here animates, but keep the field static */
+@media (prefers-reduced-motion: reduce) {
+    #app-mount::before,
+    #app-mount::after { animation: none !important; }
+}
