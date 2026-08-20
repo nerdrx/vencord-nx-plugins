@@ -22,6 +22,7 @@ A pile of voice-focused Vencord plugins I built for myself. Part of the NX stuff
 - `FriendRadar` — pings you when a chosen friend joins a VC. Optional follow-them-in mode.
 - `VCRhythm` — logs who's in voice when and draws weekly heatmaps. Stays on your machine.
 - `StalkerSuite` — local dashboard over the presence data your client already receives for people you watch. Stored locally, nothing sent anywhere. Personal use — don't be weird with it.
+- `OrbitBridge` — the consent-respecting one: feeds your *friends'* presence and custom status to a local [NX Orbit](https://github.com/nerdrx/nx-orbit) instance. Friends-only, surface-only, POSTs to 127.0.0.1 and nowhere else, never touches messages.
 
 **utility**
 - `KeywordAlerts` — desktop notification when a word or regex shows up in any channel you can see, muted or not. Click it to jump there.
