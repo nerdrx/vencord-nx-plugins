@@ -15,6 +15,8 @@ All plugins share the NX look: deep-space dark, `#7700FF` violet accents, glassy
 | **GatewayInspector** | Wireshark for Discord — live, filterable feed of every flux/gateway event with expandable JSON payloads and per-type counters. |
 | **VoiceCodecUnlocks** | Force a higher outgoing voice bitrate and take manual control of echo cancellation / noise suppression / Krisp. Great for music over mic. |
 | **VCRhythm** | Passively logs who's in voice and when (stored locally in IndexedDB) and renders per-user weekly activity heatmaps. |
+| **VoiceMastering** | A mixing desk for voice chat: auto-normalizes everyone to the same loudness (boost the quiet, tame the loud) and sets per-user gain well past Discord's 200% cap. |
+| **PresenceRadar** | Live top-down map of every voice channel in the server — who's where, muted/streaming icons, a green pulse ring on whoever's talking. Click a channel to hop in. |
 
 Each plugin exposes its controls through the **Vencord toolbox** (the icon in the top-right of the app) and/or a right-click context menu, plus settings in **Vencord → Plugins**.
 
