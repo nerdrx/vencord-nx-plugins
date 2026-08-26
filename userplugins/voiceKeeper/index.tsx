@@ -31,6 +31,11 @@ const settings = definePluginSettings({
         description: "Stop auto-rejoining after you manually disconnect or switch channels (re-arms when you rejoin the pinned channel)",
         default: true
     },
+    alwaysRejoin: {
+        type: OptionType.BOOLEAN,
+        description: "Force pin: ALWAYS rejoin the pinned channel no matter what — even if you manually disconnect or switch. Overrides the manual-leave detection above. (You can't leave until you unpin.)",
+        default: false
+    },
     showToasts: {
         type: OptionType.BOOLEAN,
         description: "Show a toast when auto-rejoining",
@@ -41,6 +46,11 @@ const settings = definePluginSettings({
 let paused = false;
 let watchdog: ReturnType<typeof setInterval> | undefined;
 let lastAttempt = 0;
+// Timestamp of the last time the voice RTC connection was NOT healthy. Used to
+// tell a real manual disconnect (fired while healthy) apart from Discord giving
+// up after a drop (RTC trouble precedes the channel being cleared).
+let lastRtcTrouble = 0;
+const DROP_GRACE_MS = 12_000;
 
 function isGatewayConnected() {
     try {
@@ -56,7 +66,8 @@ function toast(msg: string, type = Toasts.Type.MESSAGE) {
 
 function check(force = false) {
     const target = settings.store.pinnedChannelId;
-    if (!target || paused) return;
+    if (!target) return;
+    if (paused && !settings.store.alwaysRejoin) return; // force pin ignores the pause
     if (SelectedChannelStore.getVoiceChannelId() === target) return;
     if (!isGatewayConnected()) return;
 
@@ -118,8 +129,14 @@ export default definePlugin({
     },
 
     flux: {
-        // Fires on user-driven channel selection (join / move / the disconnect button),
-        // NOT on network drops — perfect for telling "I left" apart from "I got dropped".
+        // Track voice-connection health so we can tell a manual disconnect (fired
+        // while the connection is healthy) from Discord clearing the channel after
+        // it gives up on a drop (RTC trouble comes first).
+        RTC_CONNECTION_STATE(e: any) {
+            if (e?.state === "RTC_CONNECTED") lastRtcTrouble = 0;
+            else lastRtcTrouble = Date.now();
+        },
+
         VOICE_CHANNEL_SELECT(e: any) {
             const target = settings.store.pinnedChannelId;
             if (!target) return;
@@ -129,17 +146,27 @@ export default definePlugin({
             if (chanId === target) {
                 // (Re)joined the pinned channel — arm the watchdog
                 paused = false;
-            } else if (settings.store.disarmOnManualDisconnect) {
-                // Manually disconnected (null) or deliberately moved elsewhere — back off
-                if (!paused) {
-                    paused = true;
-                    toast("VoiceKeeper: paused (manual disconnect). Rejoin the pinned channel to re-arm.");
-                }
+                return;
+            }
+
+            // Force pin, or a drop (RTC was troubled just before) → never pause.
+            // The watchdog rejoins on its next tick, gated by retryInterval, so
+            // it recovers on its own without ever spamming the connection.
+            const wasDrop = Date.now() - lastRtcTrouble < DROP_GRACE_MS;
+            if (settings.store.alwaysRejoin || wasDrop) {
+                paused = false;
+                return;
+            }
+
+            if (settings.store.disarmOnManualDisconnect && !paused) {
+                paused = true;
+                toast("VoiceKeeper: paused (looks like you left on purpose). Rejoin the pinned channel to re-arm.");
             }
         },
 
         // Gateway (re)connected — e.g. right after an internet outage ends
         CONNECTION_OPEN() {
+            lastRtcTrouble = Date.now(); // connection just came back; treat as recently-troubled
             setTimeout(() => check(true), 3000);
         }
     },
@@ -152,6 +179,14 @@ export default definePlugin({
         },
         "Unpin"() {
             unpin();
+        },
+        "Re-arm & rejoin now"() {
+            if (!settings.store.pinnedChannelId) return toast("VoiceKeeper: nothing pinned", Toasts.Type.FAILURE);
+            paused = false;
+            lastAttempt = 0;
+            lastRtcTrouble = 0;
+            check(true);
+            toast("VoiceKeeper: re-armed", Toasts.Type.SUCCESS);
         }
     },
 
