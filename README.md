@@ -2,7 +2,7 @@
 
 A pile of voice-focused Vencord plugins I built for myself. Part of the NX stuff, installable through [NX Hub](https://github.com/nerdrx/nx-hub) or by hand.
 
-14 plugins, one build, all local — nothing phones home.
+16 plugins, one build, all local — nothing phones home.
 
 ## what's in here
 
@@ -23,6 +23,7 @@ A pile of voice-focused Vencord plugins I built for myself. Part of the NX stuff
 - `VCRhythm` — logs who's in voice when and draws weekly heatmaps. Stays on your machine.
 - `StalkerSuite` — local dashboard over the presence data your client already receives for people you watch. Stored locally, nothing sent anywhere. Personal use — don't be weird with it.
 - `OrbitBridge` — the consent-respecting one: feeds your *friends'* presence and custom status to a local [NX Orbit](https://github.com/nerdrx/nx-orbit) instance. Friends-only, surface-only, POSTs to 127.0.0.1 and nowhere else, never touches messages.
+- `RecallBridge` — tells a local [NX Recall](https://github.com/nerdrx/nx-recall) which Discord user was talking, and when. Recall records the mixed call off your speakers and has to guess whose voice is whose; Discord's client already knows, so this hands over the speaking edges. No audio, no messages, 127.0.0.1 only.
 
 **utility**
 - `KeywordAlerts` — desktop notification when a word or regex shows up in any channel you can see, muted or not. Click it to jump there.
