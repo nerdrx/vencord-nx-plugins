@@ -26,6 +26,20 @@
  * On the Discord desktop client the audio half cannot work at all: voice is
  * decoded and mixed inside a native module whose JS surface has no way to
  * receive it. The toolbox says so rather than looking switched on.
+ *
+ * ## Two clients, one daemon
+ *
+ * Both of those clients can now carry this plugin at once — the official
+ * Discord in one call, Vesktop in another — and both POST at the same recalld.
+ * Every line therefore names its sender: `client: { kind, account_id, instance }`.
+ * `kind` is which client this is, which is how the daemon maps a bridge to the
+ * PipeWire node its client plays through; `account_id` is the account this
+ * plugin is signed in as, which is the bridge's identity when two clients are
+ * two copies of one binary; `instance` is random per plugin start, so a
+ * reloaded plugin can be told from a second one.
+ *
+ * Without it the daemon reads every span that overlaps a turn, from both calls,
+ * and cannot tell that it is doing so. An older daemon ignores the field.
  */
 
 import { definePluginSettings } from "@api/Settings";
@@ -109,9 +123,58 @@ function setLink(next: Link, why?: string) {
     console.log(`[RecallBridge] link: ${next}${why ? ` (${why})` : ""}`);
 }
 
+/**
+ * This plugin run's id: random, generated once, never persisted.
+ *
+ * It is not an identity — the account is — it is a *lifetime*. A plugin that
+ * was reloaded and a second plugin on the same account look identical to a
+ * daemon counting spans; this is how it tells them apart, and it is why the id
+ * must change on every start and must not be derived from anything stable.
+ */
+const INSTANCE = (() => {
+    try {
+        return crypto.randomUUID().slice(0, 8);
+    } catch {
+        // No `crypto` is not a reason to send nothing: a weaker id still
+        // separates two runs, and the field is a hint, not a key.
+        return Math.random().toString(36).slice(2, 10);
+    }
+})();
+
 // ---- reads ------------------------------------------------------------------
 function myId(): string | undefined {
     try { return UserStore.getCurrentUser()?.id; } catch { return undefined; }
+}
+
+/**
+ * Which client this plugin is running in.
+ *
+ * Vencord's own build-time globals, and the same ones the audio patch's
+ * predicate reads — so "the audio half is impossible here" and "this is the
+ * official client" can never disagree. `undefined` rather than a guess when
+ * none of them is set: an unnamed bridge is scoped to nothing in particular,
+ * which is honest, and a wrong name would point the daemon at the wrong
+ * PipeWire node.
+ */
+function myKind(): "vesktop" | "discord" | "web" | undefined {
+    try {
+        if (typeof IS_VESKTOP !== "undefined" && IS_VESKTOP) return "vesktop";
+        if (typeof IS_DISCORD_DESKTOP !== "undefined" && IS_DISCORD_DESKTOP) return "discord";
+        if (typeof IS_WEB !== "undefined" && IS_WEB) return "web";
+    } catch { /* a build without the globals — say nothing */ }
+    return undefined;
+}
+
+/**
+ * The `client` object every POST carries (0.12.3). `undefined` when we cannot
+ * say who we are at all, which is exactly what an older plugin sent and is
+ * what the daemon reads as "the only bridge there was".
+ */
+function clientRef(): Record<string, unknown> | undefined {
+    const account_id = myId();
+    const kind = myKind();
+    if (!account_id && !kind) return undefined;
+    return { kind, account_id, instance: INSTANCE };
 }
 
 function myVoiceChannel(): string | null {
@@ -156,7 +219,9 @@ function audioOn(): boolean {
 // ---- queue ------------------------------------------------------------------
 function push(ep: Endpoint, obj: Record<string, unknown>) {
     let body: string;
-    try { body = JSON.stringify(obj); } catch { return; }
+    // Stamped here rather than at each call site: there is exactly one way out
+    // of this plugin, so there is exactly one place a line can leave unsigned.
+    try { body = JSON.stringify({ ...obj, client: clientRef() }); } catch { return; }
     queue.push({ ep, body });
     while (queue.length > QUEUE_CAP) { queue.shift(); dropped++; }
 }
@@ -406,7 +471,7 @@ export default definePlugin({
             <Menu.MenuItem
                 id="recall-bridge-status"
                 key="recall-bridge-status"
-                label={`${label}${queue.length ? ` · ${queue.length} queued` : ""}${dropped ? ` · ${dropped} dropped` : ""}`}
+                label={`${label}${myKind() ? ` (${myKind()})` : ""}${queue.length ? ` · ${queue.length} queued` : ""}${dropped ? ` · ${dropped} dropped` : ""}`}
                 action={() => {
                     backoffUntil = 0;
                     backoff = BACKOFF_MIN;
@@ -457,7 +522,8 @@ export default definePlugin({
             enabled: audioOn,
             frameMs: () => settings.store.audioFrameMs || 500,
             describe: uid => ({ name: nameOf(uid, channelOf(uid)), channelId: channelOf(uid) }),
-            selfId: myId
+            selfId: myId,
+            client: clientRef
         });
         flushTimer = setInterval(flush, Math.max(100, settings.store.batchMs || 500));
         // A voice connection torn down all at once does not always fire

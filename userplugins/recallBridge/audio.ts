@@ -69,6 +69,17 @@ export interface TapDescription {
 export interface AudioHooks {
     /** Is the audio half switched on right now? Read live, never cached. */
     enabled(): boolean;
+    /**
+     * Which bridge this is: `{ kind, account_id, instance }` (0.12.3).
+     *
+     * Recall can now be fed by TWO plugins at once — one in Vesktop, one in the
+     * official client, in two different calls — and a frame that does not say
+     * whose it is gets attributed to whichever call the daemon guesses. Read
+     * per frame rather than captured, because the account can change under a
+     * running client (a logout, an account switch) and a stale one would file
+     * somebody's voice under the wrong conversation.
+     */
+    client(): Record<string, unknown> | undefined;
     /** Frame length in milliseconds, from settings. */
     frameMs(): number;
     /** Nickname and channel for a user id, at the moment a frame is queued. */
@@ -232,7 +243,8 @@ function pushFrame(tap: Tap, pcm: Int16Array, seq: number, tMs: number) {
             rate: OUT_RATE,
             seq,
             samples: pcm.length,
-            pcm: base64(bytes)
+            pcm: base64(bytes),
+            client: hooks.client()
         });
     } catch {
         return;
