@@ -3,7 +3,7 @@
  * Copyright (c) 2026 nerdrx and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * RecallBridge — ground truth for NX Recall.
+ * RecallBridge — ground truth for NX Recall, and (on Vesktop) its audio.
  *
  * Recall records the *mixed* Discord stream off your speakers, so it hears one
  * conversation and has to guess who each voice belongs to. Discord's own client
@@ -11,20 +11,34 @@
  * that ring — who started talking, who stopped, and when — so Recall can score
  * its own speaker guesses against Discord's word.
  *
- * It sends *no audio* (Discord decodes remote voice in the native engine; a
- * plugin can't reach it, and doesn't need to). What goes over the wire is
- * timestamps, user ids, nicknames and channel ids, to 127.0.0.1 and nowhere
- * else. A failed flush never throws into Discord's dispatcher.
+ * That half sends *no audio*. What goes over the wire is timestamps, user ids,
+ * nicknames and channel ids, to 127.0.0.1 and nowhere else. A failed flush
+ * never throws into Discord's dispatcher.
+ *
+ * The second half, added later and **off by default**, does send audio: on
+ * Vesktop and the web client every remote user arrives as their own
+ * `MediaStream`, so their voice can be tapped separately and posted to Recall
+ * as mono 16 kHz PCM. That deletes the problem the first half only measures —
+ * there is no mixture to un-mix and no voice to identify, because each stream
+ * is one person by construction. It is a bigger claim than speaking edges and
+ * it has its own switch. See `audio.ts`.
+ *
+ * On the Discord desktop client the audio half cannot work at all: voice is
+ * decoded and mixed inside a native module whose JS surface has no way to
+ * receive it. The toolbox says so rather than looking switched on.
  */
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore, GuildMemberStore, Menu, SelectedChannelStore, showToast, Toasts, UserStore, VoiceStateStore } from "@webpack/common";
 
+import { audioBlocked, audioStats, creditAudio, drainAudio, requeueAudio, startAudio, stopAudio, sweepTaps, tapStream } from "./audio";
+
 const QUEUE_CAP = 5000; // lines held in memory; oldest dropped past this
 const POST_CAP = 800; // lines per POST, to stay well under recalld's 1 MB
 const BACKOFF_MIN = 2_000;
 const BACKOFF_MAX = 60_000;
+const SWEEP_MS = 5_000;
 
 type Endpoint = "speaking" | "voice";
 type Link = "off" | "connected" | "refused";
@@ -57,6 +71,17 @@ const settings = definePluginSettings({
         type: OptionType.NUMBER,
         default: 500,
         description: "How often to POST a batch, in milliseconds (min 100)"
+    },
+    audio: {
+        type: OptionType.BOOLEAN,
+        default: false,
+        description:
+            "Send each person's AUDIO as well (Vesktop/web only). This takes everyone's voice out of the client and hands it to recalld over 127.0.0.1 — a much bigger claim than the speaking edges above, which is why it is off. Recall then transcribes each person separately and never has to guess who was talking."
+    },
+    audioFrameMs: {
+        type: OptionType.NUMBER,
+        default: 500,
+        description: "Audio frame length in milliseconds (min 100). 500 ms is 16 kB per person per frame."
     }
 });
 
@@ -70,6 +95,7 @@ const speakingState = new Map<string, boolean>();
 const lastChannel = new Map<string, string | null>();
 
 let flushTimer: ReturnType<typeof setInterval> | undefined;
+let sweepTimer: ReturnType<typeof setInterval> | undefined;
 let inFlight = false;
 let link: Link = "off";
 let backoffUntil = 0;
@@ -120,6 +146,11 @@ function inScope(channelId: string | null): boolean {
     if (settings.store.scope === "all") return true;
     const mine = myVoiceChannel();
     return !!mine && channelId === mine;
+}
+
+/** The audio half runs only when both switches are on and the client can do it. */
+function audioOn(): boolean {
+    return !!settings.store.enabled && !!settings.store.audio && audioBlocked() == null;
 }
 
 // ---- queue ------------------------------------------------------------------
@@ -180,16 +211,18 @@ function port(): number {
     return Math.max(1, Math.min(65535, settings.store.port || 7797));
 }
 
-async function post(ep: Endpoint, lines: string[], token: string): Promise<"ok" | "drop" | "retry"> {
+type Verdict = "ok" | "drop" | "retry";
+
+async function postTo(path: string, body: string, token: string): Promise<Verdict> {
     let res: Response;
     try {
-        res = await fetch(`http://127.0.0.1:${port()}/v1/discord/${ep}`, {
+        res = await fetch(`http://127.0.0.1:${port()}${path}`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/x-ndjson",
                 Authorization: `Bearer ${token}`
             },
-            body: lines.join("\n") + "\n"
+            body
         });
     } catch {
         // recalld isn't listening (truth ingest off, or daemon down)
@@ -202,14 +235,45 @@ async function post(ep: Endpoint, lines: string[], token: string): Promise<"ok" 
     return "retry";
 }
 
+function post(ep: Endpoint, lines: string[], token: string): Promise<Verdict> {
+    return postTo(`/v1/discord/${ep}`, lines.join("\n") + "\n", token);
+}
+
+/**
+ * The audio half's own POST. Separate from the edge queue because the bodies
+ * are four orders of magnitude bigger: a batch is budgeted in BYTES, and a
+ * refused batch goes back to the front of its own queue rather than blocking
+ * the speaking edges, which are small, cheap and the thing Recall needs most.
+ */
+async function flushAudio(token: string): Promise<void> {
+    if (!audioOn()) return;
+    const lines = drainAudio();
+    if (!lines.length) return;
+    const body = lines.map(l => l.body).join("\n") + "\n";
+    const verdict = await postTo("/v1/discord/audio", body, token);
+    if (verdict === "retry") {
+        requeueAudio(lines);
+        backoffUntil = Date.now() + backoff;
+        backoff = Math.min(BACKOFF_MAX, backoff * 2);
+        return;
+    }
+    if (verdict === "ok") {
+        creditAudio(body.length);
+        setLink("connected");
+        backoff = BACKOFF_MIN;
+        backoffUntil = 0;
+    }
+    // "drop": recalld refused the size. Requeueing would loop forever on it.
+}
+
 async function flush() {
     if (inFlight) return;
     if (!settings.store.enabled) { setLink("off"); return; }
-    if (!queue.length) return;
     if (Date.now() < backoffUntil) return;
 
     const token = settings.store.token?.trim();
     if (!token) { setLink("off", "no truth token set — paste it in plugin settings"); return; }
+    if (!queue.length && !audioOn()) return;
 
     inFlight = true;
     try {
@@ -235,6 +299,7 @@ async function flush() {
                 backoffUntil = 0;
             }
         }
+        await flushAudio(token);
     } finally {
         inFlight = false;
     }
@@ -288,9 +353,37 @@ function onRtcState(e: any) {
 
 export default definePlugin({
     name: "RecallBridge",
-    description: "Hands NX Recall the one thing it can't hear: which Discord user was talking, and exactly when. Speaking edges, voice-channel membership and nicknames, POSTed to 127.0.0.1 and nowhere else. No audio, no messages.",
+    description: "Hands NX Recall the one thing it can't hear: which Discord user was talking, and exactly when. Speaking edges, voice-channel membership and nicknames, POSTed to 127.0.0.1 and nowhere else — no messages, and no audio unless you switch on the separate, default-OFF per-user audio option (Vesktop/web only), which sends everyone's voice to recalld so it never has to guess whose it was.",
     authors: [{ name: "nerdrx", id: 0n }],
     settings,
+
+    patches: [
+        // Vesktop and the web client only — see audio.ts for why the desktop
+        // client cannot do this at all. The anchor is the same volume
+        // assignment upstream's VolumeBooster hooks, and the alternation is
+        // deliberate: VolumeBooster rewrites it to `.volume=0.00;`, so matching
+        // BOTH spellings makes the two plugins compose whichever order the
+        // patcher happens to run them in.
+        {
+            find: "streamSourceNode",
+            predicate: () => !IS_DISCORD_DESKTOP,
+            replacement: {
+                match: /\.volume=(?:this\._volume\/100|0\.00);/,
+                replace: "$&$self.tapStream(this);"
+            }
+        }
+    ],
+
+    /** Called by the patch above, per remote user, whenever their sink updates. */
+    tapStream(data: any) {
+        // Never throws into Discord's own code: the whole call is best-effort
+        // and a failure here must cost a recording, not a voice channel.
+        try {
+            void tapStream(data);
+        } catch (e) {
+            console.error("[RecallBridge] could not tap a stream", e);
+        }
+    },
 
     toolboxActions() {
         const label = link === "connected"
@@ -298,6 +391,17 @@ export default definePlugin({
             : link === "refused"
                 ? "🎙 Recall bridge: refused"
                 : "🎙 Recall bridge: off";
+
+        const a = audioStats();
+        const blocked = audioBlocked();
+        const audioLabel = blocked
+            ? `🔇 Per-user audio: unavailable — ${blocked}`
+            : !settings.store.audio
+                ? "🔇 Per-user audio: off (enable it in plugin settings)"
+                : a.streams === 0
+                    ? "🔊 Per-user audio: on · no streams yet"
+                    : `🔊 Per-user audio: ${a.streams} stream${a.streams === 1 ? "" : "s"} · ${a.kbps.toFixed(1)} kB/s${a.via === "script" ? " · fallback" : ""}${a.droppedFrames ? ` · ${a.droppedFrames} dropped` : ""}${a.gaps ? ` · ${a.gaps} gaps` : ""}`;
+
         return [
             <Menu.MenuItem
                 id="recall-bridge-status"
@@ -314,6 +418,22 @@ export default definePlugin({
                                 ? "RecallBridge: recalld refused the last batch — check the token"
                                 : "RecallBridge: idle (nothing queued, or no token set)",
                         link === "connected" ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE
+                    );
+                }}
+            />,
+            <Menu.MenuItem
+                id="recall-bridge-audio"
+                key="recall-bridge-audio"
+                label={audioLabel}
+                action={() => {
+                    const s = audioStats();
+                    showToast(
+                        blocked
+                            ? `RecallBridge: ${blocked}`
+                            : s.workletError && s.via === "script"
+                                ? `RecallBridge: the audio worklet would not load (${s.workletError}); using the ScriptProcessor fallback.`
+                                : `RecallBridge: ${s.streams} stream(s), ${(s.sentBytes / 1024).toFixed(0)} kB sent, ${(s.queuedBytes / 1024).toFixed(0)} kB queued.`,
+                        blocked ? Toasts.Type.FAILURE : Toasts.Type.MESSAGE
                     );
                 }}
             />
@@ -333,12 +453,24 @@ export default definePlugin({
             emitSelf();
             emitRoster(here);
         }
+        startAudio({
+            enabled: audioOn,
+            frameMs: () => settings.store.audioFrameMs || 500,
+            describe: uid => ({ name: nameOf(uid, channelOf(uid)), channelId: channelOf(uid) }),
+            selfId: myId
+        });
         flushTimer = setInterval(flush, Math.max(100, settings.store.batchMs || 500));
+        // A voice connection torn down all at once does not always fire
+        // `ended` on its tracks, so dead taps are swept rather than trusted.
+        sweepTimer = setInterval(sweepTaps, SWEEP_MS);
     },
 
     stop() {
         clearInterval(flushTimer);
         flushTimer = undefined;
+        clearInterval(sweepTimer);
+        sweepTimer = undefined;
+        stopAudio();
         queue.length = 0;
         speakingState.clear();
         lastChannel.clear();
